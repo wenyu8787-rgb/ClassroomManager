@@ -4,12 +4,17 @@ import * as XLSX from 'xlsx';
 import Toolbar from './components/Toolbar';
 import StudentCard from './components/StudentCard';
 import { Modal, DrawModal, TimerModal, ContactBookModal, HomeworkCheckModal, SettingsModal, AddStudentModal, BatchAvatarModal, SeatArrangementsModal, GroupsModal } from './components/Modals';
+import { auth, db, googleProvider } from './firebase';
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { LogIn, LogOut, Cloud } from 'lucide-react';
 
 const STORAGE_KEY = 'classroom-manager-data';
 
 function App() {
     // --- State ---
-    // --- State ---
+    const [user, setUser] = useState(null);
+    const [isLoadingCloud, setIsLoadingCloud] = useState(false);
     const [data, setData] = useState(() => {
         const defaultData = {
             classes: [
@@ -72,17 +77,92 @@ function App() {
     const [activeModal, setActiveModal] = useState(null); // 'draw' | 'timer' | 'contact' | 'check' | 'settings' | 'addStudent' | 'batchAvatar' | 'seats' | 'groups'
     const [draggedIndex, setDraggedIndex] = useState(null);
 
-    // --- Effects ---
+    // --- Cloud Sync Logic ---
+
+    // 1. Listen for changes from Firestore (Real-time sync)
+    useEffect(() => {
+        let unsubscribe = () => { };
+
+        if (user) {
+            setIsLoadingCloud(true);
+            const docRef = doc(db, "users", user.uid);
+
+            unsubscribe = onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const cloudData = docSnap.data().data;
+                    if (cloudData) {
+                        // Only update if current local data is different (primitive check)
+                        // This prevents infinite loops if we are the ones who just saved
+                        const cloudStr = JSON.stringify(cloudData);
+                        const localStr = JSON.stringify(data);
+                        if (cloudStr !== localStr) {
+                            setData(cloudData);
+                        }
+                    }
+                } else {
+                    // First time login, save current local data to cloud
+                    setDoc(docRef, { data: data, updatedAt: new Date().toISOString() });
+                }
+                setIsLoadingCloud(false);
+            }, (error) => {
+                console.error("Firestore sync error:", error);
+                setIsLoadingCloud(false);
+            });
+        }
+
+        return () => unsubscribe();
+    }, [user]); // Only run when user changes (login/logout)
+
+    // 2. Local Storage Fallback
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }, [data]);
 
-        // Simple mock of a "sync" process
-        if (!isSynced) {
-            const timer = setTimeout(() => setIsSynced(true), 1000);
-            return () => clearTimeout(timer);
+    // 3. Debounced Save to Cloud
+    useEffect(() => {
+        if (!user || isLoadingCloud) return;
+
+        // Set synced to false when local data changes
+        setIsSynced(false);
+
+        const timer = setTimeout(async () => {
+            try {
+                await setDoc(doc(db, "users", user.uid), {
+                    data: data,
+                    updatedAt: new Date().toISOString()
+                }, { merge: true });
+                setIsSynced(true);
+            } catch (e) {
+                console.error("Cloud save failed", e);
+            }
+        }, 3000); // 3-second debounce
+
+        return () => clearTimeout(timer);
+    }, [data, user, isLoadingCloud]);
+
+    // 4. Firebase Auth State
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const handleLogin = async () => {
+        try {
+            await signInWithPopup(auth, googleProvider);
+        } catch (e) {
+            console.error("Login failed", e);
+            alert("登入失敗，請稍後再試。");
         }
-    }, [data, isSynced]);
+    };
 
+    const handleLogout = async () => {
+        if (confirm("確定要登出嗎？資料將保留在雲端。")) {
+            await signOut(auth);
+            setUser(null);
+        }
+    };
     // --- Derived State ---
     const currentClass = data.classes.find(c => c.id === data.currentClassId) || data.classes[0];
     const currentStudents = data.students.filter(s => s.classId === data.currentClassId);
@@ -576,8 +656,32 @@ function App() {
                         總分: <span className={`font-bold ${totalScore < 0 ? 'text-red-500' : 'text-green-600'}`}>{totalScore}</span>
                     </div>
                     <div>學生數: {studentCount}</div>
-                    <div>班級: {currentClass ? currentClass.name : '無'}</div>
-                    <div className="text-gray-400">{new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}</div>
+
+                    {/* User Auth Info */}
+                    <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
+                        {user ? (
+                            <div className="flex items-center gap-2">
+                                <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border border-indigo-200" title={user.displayName} />
+                                <div className="hidden sm:block">
+                                    <div className="text-xs text-gray-400 leading-none mb-1">
+                                        {isSynced ? (
+                                            <span className="text-green-500 flex items-center gap-1"><Cloud size={10} /> 已同步</span>
+                                        ) : (
+                                            <span className="text-orange-400 animate-pulse flex items-center gap-1"><Cloud size={10} className="animate-bounce" /> 同步中...</span>
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-indigo-700 font-bold max-w-[80px] truncate">{user.displayName}</div>
+                                </div>
+                                <button onClick={handleLogout} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="登出">
+                                    <LogOut size={16} />
+                                </button>
+                            </div>
+                        ) : (
+                            <button onClick={handleLogin} className="flex items-center gap-1.5 bg-white border border-gray-300 px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-50 hover:border-indigo-300 transition-all font-bold">
+                                <LogIn size={16} /> 登入備份
+                            </button>
+                        )}
+                    </div>
                 </div>
             </header>
 
