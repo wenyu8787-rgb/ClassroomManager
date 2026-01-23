@@ -555,26 +555,14 @@ function App() {
     const handleUpdateStudentScore = (id, scoreDelta) => {
         setIsSynced(false);
 
-        // Implementation rule: 
-        // 1. If we are updating an individual student from the card, we update JUST that student.
-        // 2. However, if the logic requires group sync (currently handled by the card passing a single ID),
-        //    we need to decide if card-clicks should affect the group.
-        // Based on user feedback, card clicks SHOULD affect group members.
-
         const affectedMemberIds = new Set();
 
         if (Array.isArray(id)) {
-            // Bulk update (e.g. from special group tools)
+            // Bulk update (from special group tools)
             id.forEach(sid => affectedMemberIds.add(sid));
         } else {
-            // Individual update from card
+            // Individual update - ONLY this student
             affectedMemberIds.add(id);
-
-            // Find if this student belongs to any ACTIVE group in the current class view
-            const studentGroups = data.groups.filter(g => g.memberIds.includes(id));
-            studentGroups.forEach(g => {
-                g.memberIds.forEach(mid => affectedMemberIds.add(mid));
-            });
         }
 
         setData(prev => ({
@@ -597,7 +585,6 @@ function App() {
                     return {
                         ...s,
                         isOnLeave: isLeaving,
-                        // Optional: Clear or add a note? User just said "button has no effect"
                         note: isLeaving
                             ? (s.note ? `${s.note}\n${new Date().toLocaleDateString()} 請假` : `${new Date().toLocaleDateString()} 請假`)
                             : s.note
