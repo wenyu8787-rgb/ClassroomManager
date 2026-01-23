@@ -153,7 +153,8 @@ function App() {
             await signInWithPopup(auth, googleProvider);
         } catch (e) {
             console.error("Login failed", e);
-            alert("登入失敗，請稍後再試。");
+            // 顯示具體錯誤代碼，方便排查原因
+            alert(`登入失敗！\n錯誤代碼：${e.code}\n請確認 Firebase 設定或是否攔截了彈出視窗。`);
         }
     };
 
