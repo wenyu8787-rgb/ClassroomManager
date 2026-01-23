@@ -18,18 +18,10 @@ function App() {
     const [data, setData] = useState(() => {
         const defaultData = {
             classes: [
-                { id: 'c1', name: '五年12班' }
+                { id: 'c1', name: '三年1班' }
             ],
             currentClassId: 'c1',
-            students: [
-                // Demo Data matching image partially
-                { id: 's1', classId: 'c1', name: '顏維均01', score: 2, avatar: '顏', note: '', recordTag: '', showRecord: false },
-                { id: 's2', classId: 'c1', name: '顏維佑02', score: 0, avatar: '顏', note: '', recordTag: '', showRecord: false },
-                { id: 's3', classId: 'c1', name: '林憲弘03', score: -1, avatar: '林', note: '2025/09/23 還未進入classroom', recordTag: 'homework', showRecord: true },
-                { id: 's4', classId: 'c1', name: '黃仲儒04', score: -2, avatar: '黃', note: '', recordTag: '', showRecord: false },
-                { id: 's5', classId: 'c1', name: '彭覺寬05', score: 0, avatar: '彭', note: '', recordTag: '', showRecord: false },
-                { id: 's6', classId: 'c1', name: '楊以樂06', score: -3, avatar: '楊', note: '', recordTag: '', showRecord: false },
-            ],
+            students: [],
             contactBooks: {}, // { "YYYY-MM-DD": { important: [], homework: "" } }
             homeworkStatus: {}, // { "YYYY-MM-DD-homeworkId": { studentId: boolean } }
             settingsOptions: {
